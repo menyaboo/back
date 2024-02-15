@@ -1,0 +1,74 @@
+x-build: &build
+    context: .
+    dockerfile: laravel.Dockerfile
+
+services:
+    # PHP Service
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: php:8.3
+        container_name: app
+        restart: unless-stopped
+        tty: true
+        environment:
+            SERVICE_NAME: app
+            SERVICE_TAGS: dev
+        working_dir: /var/www
+        networks:
+            - app-network
+
+    # Nginx Service
+    webserver:
+        image: nginx:alpine
+        container_name: webserver
+        restart: unless-stopped
+        tty: true
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - /home/username/laravel:/var/www
+            - ./nginx/conf.d:/etc/nginx/conf.d
+        networks:
+            - app-network
+
+    migrator:
+        build: { <<: *build }
+        volumes:
+            - ./:/var/www
+        command: php artisan migrate --force --seed
+        depends_on:
+            - app
+            - db
+        networks:
+            - app-network
+        environment:
+            DB_CONNECTION: "pgsql"
+            DB_HOST: 192.168.16.4
+            DB_PORT: "5432"
+            DB_DATABASE: "quua"
+            DB_USERNAME: "admin"
+            DB_PASSWORD: "quua_password"
+
+    db:
+        image: postgres:15-alpine
+        volumes: [ db:/var/lib/postgresql/data ]
+        environment:
+            POSTGRES_DB: "quua"
+            POSTGRES_USER: "admin"
+            POSTGRES_PASSWORD: "quua_password"
+        restart: always
+        ports:
+            - "5433:5432"
+        networks:
+            - app-network
+
+volumes:
+    db: { }
+
+# Docker Networks
+networks:
+    app-network:
+        driver: bridge
