@@ -1,60 +1,65 @@
-x-build: &build
-    context: .
-    dockerfile: laravel.Dockerfile
-
 services:
-    # PHP Service
-    app:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        image: php:8.3
-        container_name: app
-        restart: unless-stopped
-        tty: true
+    ####################################################################################################
+    # PHP
+    ####################################################################################################
+    php:
+        build: .docker/php
+        ports:
+            - 5173:5173
+        volumes:
+            - .:/var/www:cached
         environment:
-            SERVICE_NAME: app
-            SERVICE_TAGS: dev
-        working_dir: /var/www
+            DB_CONNECTION: pgsql
+            DB_HOST: db
+            DB_PORT: 5432
+            DB_DATABASE: quua
+            DB_USERNAME: admin
+            DB_PASSWORD: quua_password
         networks:
             - app-network
 
-    # Nginx Service
-    webserver:
-        image: nginx:alpine
-        container_name: webserver
-        restart: unless-stopped
-        tty: true
+    ####################################################################################################
+    # Nginx
+    ####################################################################################################
+    nginx:
+        image: nginx
         ports:
-            - "80:80"
-            - "443:443"
+            - 80:80
         volumes:
-            - /home/username/laravel:/var/www
-            - ./nginx/conf.d:/etc/nginx/conf.d
+            - .:/var/www
+            - .docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+            - .docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+        depends_on:
+            - php
         networks:
             - app-network
 
     migrator:
-        build: { <<: *build }
+        build: .docker/php
         volumes:
             - ./:/var/www
-        command: php artisan migrate --force --seed
+        command:
+            - php artisan migrate --force --seed
         depends_on:
-            - app
+            - php
             - db
+        environment:
+            DB_CONNECTION: pgsql
+            DB_HOST: db
+            DB_PORT: 5432
+            DB_DATABASE: quua
+            DB_USERNAME: admin
+            DB_PASSWORD: quua_password
         networks:
             - app-network
-        environment:
-            DB_CONNECTION: "pgsql"
-            DB_HOST: 192.168.16.4
-            DB_PORT: "5432"
-            DB_DATABASE: "quua"
-            DB_USERNAME: "admin"
-            DB_PASSWORD: "quua_password"
 
+    ####################################################################################################
+    # DATABASE (MySQL)
+    ####################################################################################################
     db:
         image: postgres:15-alpine
-        volumes: [ db:/var/lib/postgresql/data ]
+        volumes:
+            - db:/var/lib/postgresql/data
         environment:
             POSTGRES_DB: "quua"
             POSTGRES_USER: "admin"
@@ -66,7 +71,7 @@ services:
             - app-network
 
 volumes:
-    db: { }
+    db: {}
 
 # Docker Networks
 networks:
